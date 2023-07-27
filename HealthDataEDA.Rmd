@@ -1,0 +1,169 @@
+---
+title: "Health Data Analysis"
+author: "Bartley Dawud Okiya"
+date: "2023-07-21"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## Loading the libraries
+
+```{r, message = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(visdat)
+library(PerformanceAnalytics)
+```
+
+## Load the data and print first few rows
+
+```{r, message = FALSE}
+data <- read_csv("MainData.csv")
+
+head(data)
+```
+
+## Summary of the data
+
+```{r}
+summary(data)
+```
+
+## Print the structure of the data
+
+```{r}
+dim(data)
+```
+
+## Summary statistics for numerical variables
+
+```{r}
+summary(data[, 3:ncol(data)])
+```
+
+## Convert the "Period" column to date format
+
+```{r}
+data$period <- as.Date(data$period, format = "%m/%d/%y")
+str(data)
+```
+
+## Dealing with missing values
+
+```{r}
+
+colSums(is.na(data))
+
+vis_miss(data)
+
+data %>% drop_na()
+```
+# Exploring Distributions
+
+## Histogram for each numerical variable
+
+```{r}
+data %>% 
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram()
+```
+
+## Analyzing Relationships Between Variables
+
+```{r}
+numerics <- data[,3:ncol(data)]
+
+
+chart.Correlation(numerics, histogram=TRUE, method = "pearson")
+
+```
+## Research Question: Does the total deworming effort significantly reduce the diarrhoea cases in children under 5 years over time?
+
+## Overall Trends Visualization
+
+```{r}
+data %>%
+  group_by(period) %>%
+  summarise(total_dewormed = sum(`Total Dewormed`, na.rm = TRUE),
+            total_diarrhoea = sum(`diarrhoea cases`, na.rm = TRUE)) %>%
+  gather(key = "variable", value = "count", -period) %>%
+  ggplot(aes(x = period, y = count, color = variable)) +
+  geom_line() +
+  labs(x = "Time", y = "Count", title = "Overall Trends of Deworming and Diarrhoea Cases", color = "Variable")
+
+```
+It is apparent that the deworming rate was driven by diarrhea cases. When there was a growth in people being dewormed, the cases stabilized.
+
+# Correlation Analysis for select variables
+
+```{r}
+correlation_data <- data[, c("Total Dewormed", "diarrhoea cases")]
+
+
+chart.Correlation(correlation_data, histogram=TRUE, method = "pearson")
+
+```
+A correlation of 0.33 between the number of children dewormed and the number of diarrhea cases indicates a moderate positive linear relationship. As the total number of dewormed children increased, the number of diarrhea cases also tends to increase. However, the strength of this relationship is moderate, so there's a lot of variability that is not explained by this relationship.
+
+# Regression Analysis
+
+```{r}
+model <- lm(`diarrhoea cases` ~ `Total Dewormed`, data = data)
+
+summary(model)
+```
+The p-value for Total Dewormed is less than 0.05, indicating that the Total Dewormed is a statistically significant predictor of the diarrhoea cases.
+
+the R-squared value is 0.1092, which means that only about 10.92% of the variability in diarrhoea cases is explained by Total Dewormed. The rest of the variability is unexplained by this model, suggesting there may be other variables not included in this model that could explain the number of diarrhoea cases.
+
+We will chose to add more variables:
+
+1. Acute Malnutrition: It's plausible that malnourished children have weaker immune systems, and therefore may be more susceptible to diarrheal diseases. This could help explain additional variability in the data.
+
+2. Underweight 0-<6 months, Underweight 6-23 months, Underweight 24-59 Months: These variables represent underweight children at different age categories. Being underweight might also make children more susceptible to diseases including diarrhea.
+
+3. stunted 0-<6 months, stunted 6-23 months, stunted 24-59 months: These variables could also be relevant, as stunting is a sign of chronic malnutrition, which can be linked to susceptibility to disease.
+
+## Adding more variables (Multiple Lienar Regression)
+
+```{r}
+model <- lm(`diarrhoea cases` ~ `Total Dewormed` + `Acute Malnutrition` + 
+            `Underweight 0-<6 months` + `Underweight 6-23 months` + `Underweight 24-59 Months` +
+            `stunted 0-<6 months` + `stunted 6-23 months` + `stunted 24-59 months`, data = data)
+
+summary(model)
+
+```
+
+The model's R-squared is 0.586, which means that about 58.6% of the variation in diarrhoea cases can be explained by these predictors
+
+1. Among all predictors, five variables (Total Dewormed, Acute Malnutrition, Underweight 0-<6 months, Underweight 6-23 months, and Underweight 24-59 Months) show a significant positive correlation with diarrhoea cases. The variable stunted 6-23 months is also positively correlated with the response variable.
+
+2. The coefficient of Total Dewormed (0.005) indicates that for every additional unit of Total Dewormed, the number of diarrhoea cases is predicted to increase by about 0.005 units, holding all other predictors constant. However, the practical significance of this effect might not be substantial, given the scale of these variables.
+
+3. Acute Malnutrition (0.3648), Underweight 0-<6 months (3.129), Underweight 6-23 months (1.040) and Underweight 24-59 Months (0.486) also show positive coefficients, meaning that increases in these predictors are associated with increases in the number of diarrhoea cases, all else being equal.
+
+4. The stunted 6-23 months variable (0.5806) shows a positive relationship with diarrhoea cases too, suggesting that the higher the number of children stunted at this age, the higher the number of diarrhea cases, given the other predictors in the model remain constant.
+
+5. The variables stunted 0-<6 months and stunted 24-59 months were not found to be significantly related to diarrhoea cases at the standard 0.05 level.
+
+# Conclusion
+
+The analysis has been conducted aiming to investigate the effect of total deworming efforts on the reduction of diarrhoea cases in children under 5 years over time. From the correlation analysis and the regression models created, several conclusions can be drawn.
+
+1. Firstly, a correlation of 0.33 was found between total deworming efforts and diarrhoea cases, which indicates a moderate positive relationship between the two variables. This suggests that as deworming efforts increase, diarrhoea cases also tend to increase, contrary to the expectation that deworming would lead to a decrease in diarrhoea cases. However, it's crucial to note that this correlation does not imply causation, and the positive correlation could be driven by other confounding factors.
+
+2. The simple linear regression model showed that the total dewormed variable is statistically significant, with an increase in total deworming associated with an increase in diarrhoea cases. However, the model's R-squared value was 0.1092, meaning that only about 10.92% of the variation in diarrhoea cases can be explained by deworming efforts alone.
+
+3. The multiple linear regression model included additional variables to account for more factors that may influence diarrhoea cases. Variables such as Acute Malnutrition, Underweight 0-<6 months, Underweight 6-23 months, and Underweight 24-59 Months were all positively associated with diarrhoea cases, and significantly so. This indicates that these factors play a crucial role in the prevalence of diarrhoea cases, and they should be addressed in conjunction with deworming efforts. The multiple regression model had a considerably higher R-squared value of 0.586, implying that the model, including all the predictors, explains approximately 58.6% of the variation in diarrhoea cases.
+
+In conclusion, while deworming efforts are essential in addressing children's health issues, our analysis suggests that they are not directly linked to a reduction in diarrhoea cases. Other health and socio-economic factors significantly contribute to the diarrhoea case rate and should not be overlooked in efforts to improve children's health. Further research is required to gain a deeper understanding of these relationships and how they can be utilized to formulate more effective public health strategies.
